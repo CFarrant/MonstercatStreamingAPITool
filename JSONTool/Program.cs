@@ -195,7 +195,7 @@ namespace JSONTool
 
         public static void PersistData()
         {
-            string host = "http://34.201.109.34:8080/api/";
+            string host = "http://monstercatstreaming.tk/api/";
 
             foreach (KeyValuePair<string, Artist> a in allArtists)
             {
