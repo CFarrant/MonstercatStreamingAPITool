@@ -234,12 +234,11 @@ namespace JSONTool
                         {
                             allArtists.Add(a.getName(), a);
                         }
-                        else Console.WriteLine("[WARN]: Artist Already Exists in API");
                     }
                     catch (Exception ex) { }
                     allAlbums.Add(new Album((string)id, (string)name, a, (string)type,
                         (string)releaseCode, (string)coverURL, (string)primaryGenre, (string)secondaryGenre));
-                    Console.WriteLine($"[INFO] Processed Album {skip+i+1} of {total}");
+                    Console.WriteLine($"[INFO]: Processed Album {skip+i+1} of {total}");
                     i++;
                 }
                 skip += i;
@@ -293,11 +292,10 @@ namespace JSONTool
                                 {
                                     allArtists.Add(a2.getName(), a2);
                                 }
-                                else Console.WriteLine("[WARN]: Artist Already Exists in API");
                             }
                             catch (Exception ex) { }
                             tempTrackList.Add(new Track((string)id, (string)name, a2, (string)primaryGenre, (string)secondaryGenre, url, a, (int)track));
-                            Console.WriteLine($"[INFO] Processed Track {i + 1} of {temp.Count()}");
+                            Console.WriteLine($"[INFO]: Processed Track {i + 1} of {temp.Count()}");
                         }
                     }
 
@@ -307,7 +305,6 @@ namespace JSONTool
                         {
                             allTracks.Add(t);
                         }
-                        else Console.WriteLine("[WARN]: Track Already Exists in API");
                     }
                     i++;
                 }
@@ -338,7 +335,16 @@ namespace JSONTool
                 }
             }
 
-            foreach (Album a in allAlbums)
+            List<Album> newAlbums = new List<Album>();
+            foreach(Album a in allAlbums)
+            {
+                if (!APIAlbums.ContainsKey(a.id))
+                {
+                    newAlbums.Add(a);
+                }
+            }
+
+            foreach (Album a in newAlbums)
             {
                 var httpWebRequest = (HttpWebRequest)WebRequest.Create(host+"/album");
                 httpWebRequest.ContentType = "application/json";
