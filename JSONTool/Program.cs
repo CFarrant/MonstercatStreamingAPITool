@@ -18,6 +18,10 @@ namespace JSONTool
         public static string password = "APIDev";
         public static string authentication = Base64Encode(username+":"+password);
 
+        public static Dictionary<string, Artist> APIArtists;
+        public static Dictionary<string, Album> APIAlbums;
+        public static Dictionary<string, Track> APITracks;
+
         public static Dictionary<string, Artist> allArtists;
         public static List<Album> allAlbums;
         public static List<Track> allTracks;
@@ -25,7 +29,11 @@ namespace JSONTool
         public static void Main(string[] args)
         {
             allArtists = new Dictionary<string, Artist>();
-            GrabAllAlbumsAsync().Wait();
+            Console.WriteLine("[INFO] Calling API & Grabbing All Existing Data...");
+            GrabAllAPIAlbumsAsync().Wait();
+            Console.WriteLine("[INFO] Calling Monstercat.com & Grabbing All New Data...");
+            GrabAllSourceAlbumsAsync().Wait();
+            Console.WriteLine("[INFO] Calling API & Saving All New Data...");
             PersistData();
             Console.WriteLine("[INFO] All Albums & Songs Imported, Press Any Key to Continue...");
             Console.ReadKey(true);
@@ -37,7 +45,108 @@ namespace JSONTool
             return "Basic " + System.Convert.ToBase64String(plainTextBytes);
         }
 
-        private static async Task GrabAllAlbumsAsync()
+        private static async Task GrabAllAPIAlbumsAsync()
+        {
+            string jsonString = "";
+
+            using (var client = new HttpClient())
+            {
+                client.BaseAddress = new Uri("http://monstercatstreaming.tk:8080/api/");
+                client.DefaultRequestHeaders.Accept.Clear();
+                client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+                HttpResponseMessage response = await client.GetAsync($"album/");
+                response.EnsureSuccessStatusCode();
+                jsonString = await response.Content.ReadAsStringAsync();
+            }
+
+            var jsSerializer = new JavaScriptSerializer();
+            APIAlbums = new Dictionary<string, Album>();
+            APIArtists = new Dictionary<string, Artist>();
+            APITracks = new Dictionary<string, Track>();
+
+            object[] deserialize = (object[])jsSerializer.DeserializeObject(jsonString);
+            foreach(Dictionary<string, object> o in deserialize)
+            {
+                o.TryGetValue("id", out object id);
+                o.TryGetValue("name", out object name);
+                o.TryGetValue("type", out object type);
+                o.TryGetValue("releaseCode", out object releaseCode);
+                o.TryGetValue("genreprimary", out object genreprimary);
+                o.TryGetValue("genresecondary", out object genresecondary);
+                o.TryGetValue("coverURL", out object coverURL);
+                o.TryGetValue("artist", out object artist);
+
+                var artistDictionary = (Dictionary<string, object>)artist;
+
+                artistDictionary.TryGetValue("name", out object artistName);
+
+                Artist art = new Artist((string)artistName);
+                Album alb = new Album((string)id, (string)name, art, (string)type, (string)releaseCode, (string)coverURL, (string)genreprimary, (string)genresecondary);
+                try
+                {
+                    Console.WriteLine("[INFO]: Caching Album " + id);
+                    APIAlbums.Add(alb.id, alb);
+                }
+                catch (Exception ex){}
+                try
+                {
+                    Console.WriteLine("[INFO]: Caching Artist " + artistName);
+                    APIArtists.Add(art.name, art);
+                }
+                catch (Exception ex){}
+            }
+
+            Console.WriteLine("[INFO]: All Albums in API Cached");
+
+            foreach(string albumId in APIAlbums.Keys)
+            {
+                using (var client = new HttpClient())
+                {
+                    client.BaseAddress = new Uri("http://monstercatstreaming.tk:8080/api/");
+                    client.DefaultRequestHeaders.Accept.Clear();
+                    client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+                    HttpResponseMessage response = await client.GetAsync($"album/{albumId}");
+                    response.EnsureSuccessStatusCode();
+                    jsonString = await response.Content.ReadAsStringAsync();
+                }
+
+                deserialize = (object[])jsSerializer.DeserializeObject(jsonString);
+                foreach (Dictionary<string, object> o in deserialize)
+                {
+                    o.TryGetValue("id", out object id);
+                    o.TryGetValue("tracknumber", out object tracknumber);
+                    o.TryGetValue("title", out object title);
+                    o.TryGetValue("genreprimary", out object genreprimary);
+                    o.TryGetValue("genresecondary", out object genresecondary);
+                    o.TryGetValue("songURL", out object songURL);
+                    o.TryGetValue("artist", out object artist);
+
+                    var artistDictionary = (Dictionary<string, object>)artist;
+
+                    artistDictionary.TryGetValue("name", out object artistName);
+
+                    Artist art = new Artist((string)artistName);
+                    Track tra = new Track((string)id, (string)title, art, (string)genreprimary, (string)genresecondary, (string)songURL, new Album(), (int)tracknumber);
+
+                    try
+                    {
+                        Console.WriteLine("[INFO]: Caching Track " + tra.getId());
+                        APITracks.Add(tra.getId(), tra);
+                    }
+                    catch (Exception ex) { }
+                    try
+                    {
+                        Console.WriteLine("[INFO]: Caching Artist " + artistName);
+                        APIArtists.Add(art.name, art);
+                    }
+                    catch (Exception ex) { }
+                }
+            }
+        }
+
+        private static async Task GrabAllSourceAlbumsAsync()
         {
             string jsonString = "";
 
@@ -121,7 +230,11 @@ namespace JSONTool
                     Artist a = new Artist((string)albumArtist);
                     try
                     {
-                        allArtists.Add(a.getName(), a);
+                        if (!APIArtists.ContainsKey(a.getName()))
+                        {
+                            allArtists.Add(a.getName(), a);
+                        }
+                        else Console.WriteLine("[WARN]: Artist Already Exists in API");
                     }
                     catch (Exception ex) { }
                     allAlbums.Add(new Album((string)id, (string)name, a, (string)type,
@@ -176,7 +289,11 @@ namespace JSONTool
                             Artist a2 = new Artist((string)trackArtist);
                             try
                             {
-                                allArtists.Add(a2.getName(), a2);
+                                if (!APIArtists.ContainsKey(a2.getName()))
+                                {
+                                    allArtists.Add(a2.getName(), a2);
+                                }
+                                else Console.WriteLine("[WARN]: Artist Already Exists in API");
                             }
                             catch (Exception ex) { }
                             tempTrackList.Add(new Track((string)id, (string)name, a2, (string)primaryGenre, (string)secondaryGenre, url, a, (int)track));
@@ -186,7 +303,11 @@ namespace JSONTool
 
                     foreach (Track t in tempTrackList)
                     {
-                        allTracks.Add(t);
+                        if (!APITracks.ContainsKey(t.getId()))
+                        {
+                            allTracks.Add(t);
+                        }
+                        else Console.WriteLine("[WARN]: Track Already Exists in API");
                     }
                     i++;
                 }
